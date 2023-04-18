@@ -147,7 +147,7 @@ public:
      */
     virtual bd_size_t size() const;
 
-    virtual char *get_type();
+    // virtual char *get_type();
 
 private:
     // Master side hardware

@@ -140,7 +140,7 @@ int SPIFBlockDevice::deinit()
 
     return 0;
 }
-char SPIFBlockDevice::*get_type() { return 0; }
+// char SPIFBlockDevice::*get_type() { return 0; }
 void SPIFBlockDevice::_cmdread(
     uint8_t op, uint32_t addrc, uint32_t retc,
     uint32_t addr, uint8_t *rets)
