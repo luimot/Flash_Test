@@ -1,0 +1,22 @@
+{
+    "authors": {
+        "name": "Jack Berkhout",
+        "url": "https://os.mbed.com/users/JackB/"
+    },
+    "build": {
+        "builder": "MbedLibBuilder"
+    },
+    "description": "x",
+    "examples": [
+        "https://os.mbed.com/users/JackB/code/20180621_FT813/"
+    ],
+    "frameworks": "mbed",
+    "keywords": [],
+    "name": "SPIFBlockDevice",
+    "platforms": "*",
+    "repository": {
+        "type": "hg",
+        "url": "https://os.mbed.com/users/JackB/code/SPIFBlockDevice/"
+    },
+    "version": "0.0.0+sha.b4f61c49c866"
+}

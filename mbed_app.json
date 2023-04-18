@@ -1,0 +1,8 @@
+{
+    "target_overrides": {
+        "*": {
+            "target.components_add": ["SPIF"],
+            "target.features_add": ["STORAGE", "BOOTLOADER"]
+        }
+    }
+}
