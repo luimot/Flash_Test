@@ -1,14 +1,17 @@
 #include "mbed.h"
 #include "SPIFBlockDevice.h"
 #include "LittleFileSystem.h"
-#define FORCE_REFORMAT true
+#define FORCE_REFORMAT false
 #define BUFFER_MAX_LEN 11
+// #define DEBUG_WRITE
 #define SPI_FREQ 104e6
 #define ROOT "/fs/"
 
 SPIFBlockDevice *bd = new SPIFBlockDevice(PA_12, PA_11, PA_5, PA_4, SPI_FREQ);
 LittleFileSystem fs("fs");
-FILE *file;
+
+DIR *d;
+FILE *f;
 
 BufferedSerial ser(USBTX, USBRX, 115200);
 
@@ -22,13 +25,19 @@ void test_LFS();
 
 void mountFS();
 
-void openFile(char *path);
+void unmountFS();
 
-void messageOnCannotOpenFile(bool condition);
+void openFile(string path, string operation = "r+");
 
-void writeData(char *path);
+void closeFile(string path);
 
-void messageOnError();
+void displayFile(string path);
+
+void displayDirectory(string path);
+
+void writeFile();
+
+void onErrorMessageShow();
 
 int main()
 {
@@ -65,20 +74,36 @@ void test_SPIF()
 
 void test_LFS()
 {
-    printf("--- Mbed OS filesystem example ---\n");
+    printf("--- Starting LittleFileSystem Test ---\n");
 
-    // Setup the erase event on button press, use the event queue
-    // to avoid running in interrupt context
+    mountFS();
 
+    string filePath = "/fs/numbers.txt";
+
+    openFile(filePath);
+
+    closeFile(filePath);
+
+    displayDirectory("/fs/");
+
+    displayFile(filePath);
+
+    unmountFS();
+
+    printf("Program ended correctly...\n");
+}
+
+void mountFS()
+{
     // Try to mount the filesystem
-    printf("Mounting the filesystem... ");
+    printf("Mounting the filesystem... \n");
     fflush(stdout);
     int err = fs.mount(bd);
     printf("%s\n", (err ? "Fail :(" : "OK"));
     if (err || FORCE_REFORMAT)
     {
         // Reformat if we can't mount the filesystem
-        printf("formatting... ");
+        printf("formatting... \n");
         fflush(stdout);
         err = fs.reformat(bd);
         printf("%s\n", (err ? "Fail :(" : "OK"));
@@ -87,106 +112,61 @@ void test_LFS()
             error("error: %s (%d)\n", strerror(-err), err);
         }
     }
+}
 
-    // Open the numbers file
-    printf("Opening \"/fs/numbers.txt\"... ");
+void unmountFS()
+{
+    printf("Unmounting... ");
     fflush(stdout);
-    FILE *f = fopen("/fs/numbers.txt", "r+");
-    printf("%s\n", (!f ? "Fail :(" : "OK"));
+    err = fs.unmount();
+    printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
+    if (err < 0)
+    {
+        error("error: %s (%d)\n", strerror(-err), err);
+    }
+}
+
+void openFile(string path, string operation)
+{
+    f = fopen(path.c_str(), operation.c_str());
     if (!f)
     {
-        // Create the numbers file if it doesn't exist
-        printf("No file found, creating a new file... ");
+        // onErrorMessageShow();
+        printf("No file found, creating a new file... \n");
         fflush(stdout);
-        f = fopen("/fs/numbers.txt", "w+");
-        printf("%s\n", (!f ? "Fail :(" : "OK"));
+        f = fopen(path.c_str(), "w+");
         if (!f)
         {
-            error("error: %s (%d)\n", strerror(errno), -errno);
+            onErrorMessageShow();
         }
-
-        for (int i = 0; i < 10; i++)
-        {
-            printf("\rWriting numbers (%d/%d)... ", i, 10);
-            fflush(stdout);
-            err = fprintf(f, "    %d\n", i);
-            if (err < 0)
-            {
-                printf("Fail :(\n");
-                error("error: %s (%d)\n", strerror(errno), -errno);
-            }
-        }
-        printf("\rWriting numbers (%d/%d)... OK\n", 10, 10);
-
-        printf("Seeking file... ");
-        fflush(stdout);
-        err = fseek(f, 0, SEEK_SET);
-        printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
-        if (err < 0)
-        {
-            error("error: %s (%d)\n", strerror(errno), -errno);
-        }
+        writeFile();
     }
+}
 
-    // Go through and increment the numbers
-    for (int i = 0; i < 10; i++)
-    {
-        printf("\rIncrementing numbers (%d/%d)... ", i, 10);
-        fflush(stdout);
-
-        // Get current stream position
-        long pos = ftell(f);
-
-        // Parse out the number and increment
-        char buf[BUFFER_MAX_LEN];
-        if (!fgets(buf, BUFFER_MAX_LEN, f))
-        {
-            error("error: %s (%d)\n", strerror(errno), -errno);
-        }
-        char *endptr;
-        int32_t number = strtol(buf, &endptr, 10);
-        if (
-            (errno == ERANGE) ||         // The number is too small/large
-            (endptr == buf) ||           // No character was read
-            (*endptr && *endptr != '\n') // The whole input was not converted
-        )
-        {
-            continue;
-        }
-        number += 1;
-
-        // Seek to beginning of number
-        fseek(f, pos, SEEK_SET);
-
-        // Store number
-        fprintf(f, "    %d\n", number);
-
-        // Flush between write and read on same file
-        fflush(f);
-    }
-    printf("\rIncrementing numbers (%d/%d)... OK\n", 10, 10);
-
+void closeFile(string path)
+{
     // Close the file which also flushes any cached writes
-    printf("Closing \"/fs/numbers.txt\"... ");
+    printf("Closing \"%s\"... ", path.c_str());
     fflush(stdout);
     err = fclose(f);
     printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
     if (err < 0)
     {
-        error("error: %s (%d)\n", strerror(errno), -errno);
+        onErrorMessageShow();
     }
+}
 
+void displayDirectory(string path)
+{
     // Display the root directory
-    printf("Opening the root directory... ");
+    printf("Listing \"%s\"... \n", path.c_str());
     fflush(stdout);
-    DIR *d = opendir("/fs/");
+    d = opendir(path.c_str());
     printf("%s\n", (!d ? "Fail :(" : "OK"));
     if (!d)
     {
-        error("error: %s (%d)\n", strerror(errno), -errno);
+        onErrorMessageShow();
     }
-
-    printf("root directory:\n");
     while (true)
     {
         struct dirent *e = readdir(d);
@@ -198,50 +178,73 @@ void test_LFS()
         printf("    %s\n", e->d_name);
     }
 
-    printf("Closing the root directory... ");
     fflush(stdout);
     err = closedir(d);
     printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
     if (err < 0)
     {
-        error("error: %s (%d)\n", strerror(errno), -errno);
+        onErrorMessageShow();
     }
+}
 
-    // Display the numbers file
-    printf("Opening \"/fs/numbers.txt\"... ");
+void onErrorMessageShow()
+{
+
+    error("error: %s (%d)\n", strerror(errno), -errno);
+}
+
+void writeFile()
+{
+    for (int i = 0; i <= 10; i++)
+    {
+#ifdef DEBUG_WRITE
+        printf("\rWriting numbers (%d/%d)... ", i, 10);
+#endif
+        fflush(stdout);
+        err = fprintf(f, "    %d\n", i);
+        if (err < 0)
+        {
+            printf("Fail :(\n");
+            onErrorMessageShow();
+        }
+    }
+#ifdef DEBUG_wRITE
+    printf("\rWriting numbers (%d/%d)... OK\n", 10, 10);
+#endif
+    printf("Seeking file... ");
     fflush(stdout);
-    f = fopen("/fs/numbers.txt", "r");
+    err = fseek(f, 0, SEEK_SET);
+    printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
+    if (err < 0)
+    {
+        onErrorMessageShow();
+    }
+}
+
+void displayFile(string path)
+{
+    // Display the numbers file
+    printf("Displaying \"%s\"... \n", path.c_str());
+    fflush(stdout);
+    f = fopen(path.c_str(), "r");
     printf("%s\n", (!f ? "Fail :(" : "OK"));
     if (!f)
     {
-        error("error: %s (%d)\n", strerror(errno), -errno);
+        onErrorMessageShow();
     }
-
+    // Listing numbers code block
     printf("numbers:\n");
     while (!feof(f))
     {
         int c = fgetc(f);
         printf("%c", c);
     }
-
-    printf("\rClosing \"/fs/numbers.txt\"... ");
+    // Listing numbers code block
     fflush(stdout);
     err = fclose(f);
     printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
     if (err < 0)
     {
-        error("error: %s (%d)\n", strerror(errno), -errno);
+        onErrorMessageShow();
     }
-
-    // Tidy up
-    printf("Unmounting... ");
-    fflush(stdout);
-    err = fs.unmount();
-    printf("%s\n", (err < 0 ? "Fail :(" : "OK"));
-    if (err < 0)
-    {
-        error("error: %s (%d)\n", strerror(-err), err);
-    }
-
-    printf("Mbed OS filesystem example done!\n");
 }
